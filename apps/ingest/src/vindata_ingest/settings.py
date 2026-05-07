@@ -28,6 +28,11 @@ class IngestSettings(BaseSettings):
     # Sources.
     open_meteo_base_url: str = "https://api.open-meteo.com/v1"
     open_meteo_archive_url: str = "https://archive-api.open-meteo.com/v1"
+    airquality_base_url: str = "https://data.airquality.nsw.gov.au"
+    airquality_offline: bool = False
+    firms_base_url: str = "https://firms.modaps.eosdis.nasa.gov"
+    firms_map_key: str = ""  # Empty → resource is offline, no calls made.
+    firms_source: str = "MODIS_NRT"
 
 
 @lru_cache(maxsize=1)

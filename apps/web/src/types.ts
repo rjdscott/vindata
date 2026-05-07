@@ -32,7 +32,7 @@ export interface ScoreRow {
   level: FrostLevel;
   wedge: Wedge;
   model_version: string;
-  inputs: Record<string, number>;
+  inputs: Record<string, number | string | boolean | null>;
 }
 
 export interface ForecastRow {
@@ -46,4 +46,15 @@ export interface ForecastRow {
   precip_mm: number | null;
   cloud_frac: number | null;
   sw_rad: number | null;
+}
+
+export interface PhenologyStateRow {
+  block_id: number;
+  date: string; // ISO8601 date
+  doy: number;
+  chill_units: number;
+  forcing_dd: number;
+  gdd_from_budbreak: number;
+  bbch: number;
+  model_version: string;
 }

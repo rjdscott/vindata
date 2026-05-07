@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from vindata_api.db import init_db, shutdown_db
 from vindata_api.logging_config import configure_logging
-from vindata_api.routers import health, scores, vineyards
+from vindata_api.routers import blocks, health, scores, vineyards
 from vindata_api.settings import Settings, get_settings
 
 log = structlog.get_logger(__name__)
@@ -58,6 +58,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(vineyards.router)
     app.include_router(scores.router)
+    app.include_router(blocks.router)
     return app
 
 

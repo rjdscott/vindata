@@ -3,6 +3,7 @@
 
 import type {
   ForecastRow,
+  PhenologyStateRow,
   ScoreRow,
   VineyardDetail,
   VineyardSummary,
@@ -31,6 +32,10 @@ export const api = {
     getJson<ScoreRow[]>(
       `/v1/vineyards/${id}/scores?wedge=${wedge}&hours=${hours}`,
     ),
+  getBlockPhenology: (blockId: number, days = 120) =>
+    getJson<PhenologyStateRow[]>(
+      `/v1/blocks/${blockId}/phenology?days=${days}`,
+    ),
 };
 
 export const queryKeys = {
@@ -39,4 +44,5 @@ export const queryKeys = {
   forecast: (id: number) => ["vineyards", id, "forecast"] as const,
   scores: (id: number, wedge: Wedge) =>
     ["vineyards", id, "scores", wedge] as const,
+  blockPhenology: (id: number) => ["blocks", id, "phenology"] as const,
 };
