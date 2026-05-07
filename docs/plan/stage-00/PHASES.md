@@ -1,8 +1,10 @@
 # VinData — Stage 00 Phased Delivery
 
-> Stage 00 is one continuous push to a working end-to-end thin slice (frost wedge for Cargo Road), measured against objective checkpoints. Total effort: **~5–7 person-days** for one staff engineer.
+> Stage 00 is one continuous push to a working end-to-end PoC, measured against objective checkpoints. Phases 0.1–0.7 shipped the **frost wedge** thin slice; Phase 0.8 (post-merge of #1) extended it to **all four wedges** + real public-API ingest.
 >
-> Companion: [`ARCHITECTURE.md`](./ARCHITECTURE.md), [`LOCAL-DEV.md`](./LOCAL-DEV.md).
+> Total effort: ~5–7 person-days for the original thin slice + ~1.5 days for the multi-wedge expansion (Phase 0.8).
+>
+> Companion: [`ARCHITECTURE.md`](./ARCHITECTURE.md), [`LOCAL-DEV.md`](./LOCAL-DEV.md), [`checkpoints/MULTI-WEDGE.md`](./checkpoints/MULTI-WEDGE.md).
 
 ---
 
@@ -158,11 +160,39 @@
 
 ---
 
+## Phase 0.8 — Multi-wedge expansion (post-merge, ~1.5 days) ✅
+
+**Goal.** Implement the disease, smoke-taint, and phenology wedges that Phases 0.1–0.7 stubbed; wire two new public-data ingestors; replay all four wedges against real SILO data.
+
+**Deliverables (shipped in PR #2 / `feat/wedges-disease-smoke-phenology`).**
+
+- **Phenology** (`packages/agronomy/phenology`): Caffarra-Eccel BBCH chilling+forcing, Winkler GDD, Huglin index, FAO-56 Penman-Monteith ETo, single-bucket SWB. Cultivar parameter table for Chardonnay / Shiraz / Pinot Noir.
+- **Disease** (`packages/agronomy/disease`): DMCast (Magarey-Wachtel), Gubler-Thomas powdery index (UC IPM), Broome-Bettiga botrytis logistic, NEWA CART leaf-wetness proxy. PM/Botrytis gated on BBCH ≥ 53.
+- **Smoke** (`packages/agronomy/smoke`): Coulter-2022 PM2.5 dose with stability + phenology weighting and a 35 µg/m³ background floor.
+- **Ingest** (`apps/ingest`): NSW DPE Air Quality + NASA FIRMS resources (offline-graceful), 5 new Dagster assets (`raw_air_quality`, `raw_firms`, `phenology_state`, `disease_score`, `smoke_score`) and 4 new asset checks. Phenology runs **first** in the score group so disease + smoke can read live BBCH.
+- **Database** (Alembic 0002): `phenology_state`, `pm25_observations` (hypertable), `fire_hotspots` (PostGIS POINT, GiST), `agronomy_scores.wedge` check constraint.
+- **API**: `/v1/blocks/{id}/phenology`; `/v1/vineyards/{id}/scores?wedge=` polymorphic across all six wedge slugs.
+- **Web**: 4-card grid on `VineyardPage` (Frost · Disease · Smoke · Phenology), each a level chip + key metric + pure-SVG sparkline. Detailed FrostChart kept underneath.
+- **Hindcast** (`packages/agronomy/notebooks/hindcast.py`): runs all four wedges against the public SILO Orange tile (8 years, 2922 days). Results in [`checkpoints/MULTI-WEDGE.md`](./checkpoints/MULTI-WEDGE.md).
+
+**Success criteria** (all met)
+- [x] `pytest packages/agronomy` — 101 tests, **97.58 % coverage**, mypy --strict clean.
+- [x] `pytest apps/api/tests` — 11 unit + 4 integration markers; mypy --strict clean.
+- [x] `pytest apps/ingest/tests` — 11 (asset graph + new dependencies validated).
+- [x] `vitest` — 16 web tests; `Sparkline` and `WedgeCards` tests added.
+- [x] `eslint src --max-warnings=0` — `no-unwrapped-score` still satisfied.
+- [x] `ruff check .` — clean across the monorepo.
+- [x] `bash scripts/smoke.sh` — exits 0 against the rebuilt stack.
+
+**What remains for Stage 01**: refit frost + phenology coefficients on Orange BoM AWS 063303 (current literature defaults are functional but above the Stage 01 acceptance bands — see [`checkpoints/MULTI-WEDGE.md`](./checkpoints/MULTI-WEDGE.md) for the gap analysis).
+
+---
+
 ## Done means
 
-Stage 00 is "done" when `bash scripts/smoke.sh` exits 0 from a clean checkout on a peer's laptop. The artifact set:
+Stage 00 is "done" when `bash scripts/smoke.sh` exits 0 from a clean checkout on a peer's laptop **with all four wedges materialising**. The artifact set:
 
-1. The four Stage 00 docs in `docs/plan/stage-00/`.
-2. The runnable monorepo (Phases 0.1–0.7).
-3. `docs/plan/stage-00/checkpoints/SMOKE.md` proving the smoke ran green.
-4. `docs/plan/stage-00/checkpoints/RETRO.md` — what we'd do differently in Stage 01.
+1. The Stage 00 docs in `docs/plan/stage-00/`.
+2. The runnable monorepo (Phases 0.1–0.8).
+3. `docs/plan/stage-00/checkpoints/SMOKE.md` proving the original frost smoke ran green.
+4. `docs/plan/stage-00/checkpoints/MULTI-WEDGE.md` — multi-wedge hindcast results + gap analysis.

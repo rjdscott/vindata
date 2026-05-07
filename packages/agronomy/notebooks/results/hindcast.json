@@ -1,0 +1,52 @@
+{
+  "generated_at": "2026-05-07T07:43:21.680355+00:00",
+  "data_source": "silo",
+  "period_start": "2018-05-07",
+  "period_end": "2026-05-07",
+  "n_days": 2922,
+  "frost": {
+    "n": 2922,
+    "mae_c": 2.3759172222680904,
+    "hit_rate_0c": 0.44011976047904194,
+    "far_0c": 0.4712230215827338,
+    "confusion_matrix": {
+      "tp": 147,
+      "fp": 131,
+      "fn": 187,
+      "tn": 2457
+    }
+  },
+  "phenology": {
+    "budbreak_doy": 262,
+    "flowering_doy": 343,
+    "veraison_doy": 32,
+    "maturity_doy": 67,
+    "n_days": 2922
+  },
+  "eto": {
+    "annual_eto_mm": 10117.586133660901,
+    "n_days": 2922
+  },
+  "disease": {
+    "dm": {
+      "days": 2922,
+      "wet_days": 417,
+      "dsv_total": 1668,
+      "dsv_high_days": 417
+    },
+    "pm": {
+      "max_index": 100,
+      "final_index": 0
+    },
+    "botrytis": {
+      "events": 740,
+      "high_prob_events": 703
+    }
+  },
+  "smoke": {
+    "window_days": 90,
+    "smoky_days": 5,
+    "flagged_high_or_extreme": 5,
+    "extreme": 5
+  }
+}

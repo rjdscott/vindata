@@ -19,6 +19,10 @@ def test_asset_checks_registered() -> None:
     assert "forecast_variables_not_null" in spec_names
     assert "forecast_temperatures_in_range" in spec_names
     assert "forecast_valid_ts_monotone" in spec_names
+    # New wedge checks.
+    assert "phenology_bbch_in_range" in spec_names
+    assert "disease_score_in_unit_interval" in spec_names
+    assert "smoke_score_in_unit_interval" in spec_names
 
 
 def test_blocking_checks_are_marked_blocking() -> None:

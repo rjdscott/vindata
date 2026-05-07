@@ -6,7 +6,7 @@ sees them in one metadata. Geometry columns use ``geoalchemy2``.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from geoalchemy2 import Geography
@@ -14,6 +14,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     CheckConstraint,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -125,4 +126,73 @@ class AgronomyScore(Base):
     )
 
 
-__all__ = ["AgronomyScore", "Base", "Block", "Vineyard", "WeatherForecast"]
+class PhenologyState(Base):
+    __tablename__ = "phenology_state"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
+    block_id: Mapped[int] = mapped_column(
+        ForeignKey("blocks.id", ondelete="CASCADE"), nullable=False
+    )
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    doy: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    chill_units: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    forcing_dd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    gdd_from_budbreak: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    bbch: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    model_version: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("block_id", "date", name="uq_phenology_state_block_date"),
+        CheckConstraint("bbch BETWEEN 0 AND 99", name="ck_phenology_state_bbch_range"),
+    )
+
+
+class Pm25Observation(Base):
+    __tablename__ = "pm25_observations"
+
+    vineyard_id: Mapped[int] = mapped_column(
+        ForeignKey("vineyards.id", ondelete="CASCADE"), nullable=False
+    )
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    pm25_ug_m3: Mapped[float] = mapped_column(Float, nullable=False)
+    station: Mapped[str] = mapped_column(String, nullable=False)
+    distance_km: Mapped[float] = mapped_column(Float, nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("vineyard_id", "ts"),
+        CheckConstraint(
+            "pm25_ug_m3 >= 0 AND pm25_ug_m3 < 5000",
+            name="ck_pm25_observations_range",
+        ),
+    )
+
+
+class FireHotspot(Base):
+    __tablename__ = "fire_hotspots"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    geom: Mapped[Any] = mapped_column(Geography("POINT", srid=4326), nullable=False)
+    brightness_k: Mapped[float | None] = mapped_column(Float)
+    frp_mw: Mapped[float | None] = mapped_column(Float)
+    satellite: Mapped[str] = mapped_column(String, nullable=False)
+    confidence: Mapped[int | None] = mapped_column(SmallInteger)
+    source: Mapped[str] = mapped_column(String, nullable=False, default="firms_modis")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+__all__ = [
+    "AgronomyScore",
+    "Base",
+    "Block",
+    "FireHotspot",
+    "PhenologyState",
+    "Pm25Observation",
+    "Vineyard",
+    "WeatherForecast",
+]

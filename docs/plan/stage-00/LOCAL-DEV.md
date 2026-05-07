@@ -33,13 +33,28 @@ uv sync                 # hydrates each Python workspace
 # Bring up the stack
 cp .env.example .env    # `make up` does this if .env is missing
 make up                 # waits for all healthchecks; ≤ 60 s on warm cache
-make seed               # idempotent; loads 6 vineyards
-make dagster-materialize  # runs the asset graph end-to-end
-open http://localhost:5173        # the app
+make seed               # idempotent; loads 6 vineyards + their blocks
+make dagster-materialize  # runs the asset graph end-to-end (all 4 wedges)
+open http://localhost:5173        # the app — 4-card grid per vineyard
 open http://localhost:3001        # Dagster UI
 open http://localhost:9001        # MinIO console (login from .env)
 open http://localhost:8025        # MailHog UI (no alerts at Stage 00 yet)
 ```
+
+### External-data env vars (optional)
+
+Air-quality and FIRMS ingestion both have offline modes so the smoke test stays green without network. Configure via `.env` if you want live data:
+
+```
+# NSW DPE Air Quality — public, no key required.
+VINDATA_INGEST_AIRQUALITY_OFFLINE=false   # default; set true to disable
+
+# NASA FIRMS — free MAP_KEY from https://firms.modaps.eosdis.nasa.gov/api/
+VINDATA_INGEST_FIRMS_MAP_KEY=
+VINDATA_INGEST_FIRMS_SOURCE=MODIS_NRT     # or VIIRS_SNPP_NRT / VIIRS_NOAA20_NRT
+```
+
+Without `FIRMS_MAP_KEY` the FIRMS asset is offline by default and writes 0 hotspots — the smoke wedge then runs on PM2.5 alone.
 
 ## Make targets
 
@@ -109,6 +124,18 @@ make smoke                # scripts/smoke.sh, full e2e
 - **Conventional commits** suggested but not enforced at PoC.
 - **Branching**: trunk-based; PRs squash-merge into `main`.
 - **CI**: GitHub Actions running `make lint typecheck test` on every push. Cached pnpm + uv stores.
+
+## API endpoints
+
+| Endpoint | Returns |
+|---|---|
+| `GET /v1/health` | `{ status, db, minio }` |
+| `GET /v1/vineyards` | `[{ id, slug, name, region, centroid }]` |
+| `GET /v1/vineyards/{id}` | one vineyard with `blocks: [...]` |
+| `GET /v1/vineyards/{id}/forecast?hours=72` | hourly forecast rows |
+| `GET /v1/vineyards/{id}/scores?wedge=<w>&hours=<h>` | wedge ∈ `{frost, dm, pm, botrytis, smoke, pheno}` |
+| `GET /v1/blocks/{block_id}/phenology?days=120` | per-block daily BBCH state |
+| `GET /openapi.json` | OpenAPI 3.1 spec; `/docs` for Swagger UI |
 
 ## Troubleshooting
 
