@@ -1,0 +1,131 @@
+# VinData CI — unit tests only.
+#
+# Runs on every push and PR. No Docker, no integration tests, no live
+# stack: this pipeline must stay fast (<5 min) so developers don't wait.
+# Integration / smoke run locally via `make smoke`.
+#
+# Two parallel jobs (Python and Node) keep total wall-clock low.
+
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: python · ruff · mypy · pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.5.13"
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install agronomy + tools
+        run: |
+          uv venv packages/agronomy/.venv --python 3.12
+          UV_PROJECT_ENVIRONMENT=packages/agronomy/.venv uv pip install \
+            --no-deps -e packages/agronomy
+          UV_PROJECT_ENVIRONMENT=packages/agronomy/.venv uv pip install \
+            pytest pytest-cov hypothesis mypy ruff
+
+      - name: Install API + tools
+        run: |
+          uv venv apps/api/.venv --python 3.12
+          UV_PROJECT_ENVIRONMENT=apps/api/.venv uv pip install \
+            --no-deps -e packages/agronomy -e apps/api
+          UV_PROJECT_ENVIRONMENT=apps/api/.venv uv pip install \
+            "fastapi>=0.115" "uvicorn[standard]>=0.32" \
+            "sqlalchemy>=2.0.36" "asyncpg>=0.30" "alembic>=1.14" \
+            "psycopg[binary]>=3.2" "pydantic>=2.10" "pydantic-settings>=2.6" \
+            "structlog>=24.4" "geoalchemy2>=0.16" \
+            "pytest>=8.3" "pytest-asyncio>=0.24" "httpx>=0.28" \
+            mypy ruff
+
+      - name: Install ingest + tools
+        run: |
+          uv venv apps/ingest/.venv --python 3.12
+          UV_PROJECT_ENVIRONMENT=apps/ingest/.venv uv pip install \
+            --no-deps -e packages/agronomy -e apps/ingest
+          UV_PROJECT_ENVIRONMENT=apps/ingest/.venv uv pip install \
+            "dagster>=1.9" "dagster-postgres>=0.25" "boto3>=1.35" \
+            "polars>=1.18" "pyarrow>=18" "httpx>=0.28" "tenacity>=9" \
+            "sqlalchemy>=2.0.36" "psycopg[binary]>=3.2" "structlog>=24.4" \
+            "pydantic>=2.10" "pydantic-settings>=2.6" pytest
+
+      - name: ruff (root)
+        run: packages/agronomy/.venv/bin/python -m ruff check .
+
+      - name: mypy --strict (api + agronomy)
+        run: |
+          apps/api/.venv/bin/python -m mypy --strict apps/api/src
+          packages/agronomy/.venv/bin/python -m mypy --strict packages/agronomy/src
+
+      - name: pytest agronomy (with coverage gate)
+        run: |
+          packages/agronomy/.venv/bin/python -m pytest \
+            packages/agronomy/tests --cov=agronomy --cov-fail-under=90
+
+      - name: pytest API (unit only)
+        run: apps/api/.venv/bin/python -m pytest apps/api/tests
+
+      - name: pytest ingest
+        run: apps/ingest/.venv/bin/python -m pytest apps/ingest/tests
+
+  web:
+    name: web · eslint · tsc · vitest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+          run_install: false
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: ESLint (web)
+        run: pnpm --filter @vindata/web exec eslint src --max-warnings=0
+
+      - name: ESLint rule tests
+        run: pnpm --filter @vindata/eslint-rules test
+
+      - name: TypeScript (web)
+        run: pnpm --filter @vindata/web exec tsc --noEmit
+
+      - name: Vitest (web)
+        run: pnpm --filter @vindata/web exec vitest run

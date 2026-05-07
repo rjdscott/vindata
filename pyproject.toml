@@ -1,0 +1,91 @@
+[project]
+name = "vindata"
+version = "0.0.0"
+description = "Vineyard weather and agronomy decision-support PoC."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+
+[tool.uv.workspace]
+members = ["apps/api", "apps/ingest", "packages/agronomy"]
+
+[tool.uv.sources]
+agronomy = { workspace = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [".venv", "node_modules", "dist", "build", "alembic/versions"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "RET",  # flake8-return
+    "PTH",  # flake8-use-pathlib
+    "TCH",  # flake8-type-checking
+    "RUF",  # ruff-specific
+    "N",    # pep8-naming
+    "PL",   # pylint subset
+    "ANN",  # flake8-annotations
+    "S",    # flake8-bandit (security)
+    "A",    # flake8-builtins
+    "ARG",  # unused arguments
+]
+ignore = [
+    "ANN401",   # allow Any in hot edges (Dagster context)
+    "PLR0913",  # too many arguments — model functions naturally have many
+    "S101",     # asserts in tests are fine
+    "RUF002",   # scientific docstrings use Unicode minus sign (e.g. -2 °C)
+    "B008",     # FastAPI Depends(), FrostParams() default args are by design
+    "PLR2004",  # inline domain thresholds are clearer than named constants
+    "S105",     # local dev defaults; production secrets live in Secrets Manager
+    "S608",     # SQL templates with constant fragments (NOT user input) — false positive
+    "TC001",    # imports are used at runtime by FastAPI/Dagster, not just typing
+    "TC002",    # ditto third-party
+    "TC003",    # ditto stdlib
+    "ARG001",   # Dagster requires `context` parameter even when unused
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "PLR2004", "ANN", "ARG"]
+"scripts/**" = ["S101", "T201"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["agronomy", "vindata_api", "vindata_ingest"]
+combine-as-imports = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+exclude = [".venv", "alembic/versions", "build", "dist"]
+
+[[tool.mypy.overrides]]
+module = ["dagster.*", "dagster_postgres.*", "minio.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+# Defaults shared by all packages. Per-package pyproject.toml may add
+# package-specific options (e.g. asyncio_mode for the API).
+minversion = "8.0"
+addopts = "-ra --strict-markers --strict-config"
+testpaths = ["tests"]
+markers = [
+    "integration: requires docker compose stack to be up",
+]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:dagster.*",
+]

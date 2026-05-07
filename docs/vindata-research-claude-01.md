@@ -1,6 +1,6 @@
 # The "PredictWind for Vineyards" Opportunity: A Deep Strategic, Technical, and Market Assessment
 
-**Prepared for:** Rob (incoming proprietor, Word of Mouth Wines, Orange NSW)
+**Prepared for:** Rob 
 **Date:** May 2026
 
 ---

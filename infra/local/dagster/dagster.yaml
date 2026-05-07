@@ -1,0 +1,21 @@
+# Dagster instance config for the local stack.
+#
+# Storage is on the dedicated `dagster` Postgres database (created by
+# `infra/local/postgres/init.sql`) so Dagster's internal `alembic_version`
+# table never collides with the application's.
+
+storage:
+  postgres:
+    postgres_db:
+      hostname: postgres
+      username: vindata
+      password: vindata
+      db_name: dagster
+      port: 5432
+
+run_coordinator:
+  module: dagster.core.run_coordinator
+  class: QueuedRunCoordinator
+
+telemetry:
+  enabled: false

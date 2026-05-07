@@ -216,3 +216,32 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---- VinData additions ----
+
+# Node / pnpm
+node_modules/
+.pnpm-store/
+.turbo/
+dist/
+build/
+.next/
+*.tsbuildinfo
+
+# Vite
+.vite/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+
+# Local data fixtures (mounted into containers)
+/data/
+!/data/.gitkeep
+
+# Generated artifacts (Stage 01: client.ts is regenerated; at Stage 00 it is
+# committed as a hand-rolled file).
+apps/api/openapi.json
+
+# Docker
+.docker/
