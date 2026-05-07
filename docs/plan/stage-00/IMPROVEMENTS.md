@@ -59,15 +59,18 @@
 - The 6 pilot vineyards are not on the laptop. Auth is a Stage 01 concern.
 - The seam is the only thing that matters: when Stage 01 swaps Keycloak/Cognito in, only `apps/api/src/vindata_api/deps.py:current_user` changes.
 
-## 6. Frost wedge ships first; others stub
+## 6. Frost wedge ships first; the other three follow in Phase 0.8
 
 **Research doc / Stage 01**: all four wedges (frost, disease, smoke, phenology) at MVP.
 
-**Stage 00**: frost only, end-to-end. Others are stubbed in `packages/agronomy` so the package shape is right, but no implementation.
+**Stage 00 thin slice (Phases 0.1–0.7)**: frost only, end-to-end.
 
-**Why**:
-- Frost is the simplest of the four (no LWD inference, no BBCH gate, no PM2.5 fusion).
-- Proving the *pipeline* on one wedge proves it for all four. Adding the others is a parallel, mechanical effort.
+**Stage 00 expansion (Phase 0.8 — landed in PR #2)**: all four wedges shipped end-to-end; NSW DPE Air Quality and NASA FIRMS wired as real public-data sources; dashboard refactored to a 4-card grid; hindcast against 8 years of SILO Orange tile.
+
+**Why phased rather than all-at-once**:
+- Frost was the simplest of the four (no LWD inference, no BBCH gate, no PM2.5 fusion). Shipping it first proved the *pipeline* could be exercised on a single wedge.
+- The other three then dropped in mechanically once the schema, asset graph, scoring contract, and dashboard shell were proven. Phase 0.8 added ~7,500 lines (model code + tests + ingestors + cards) over ~1.5 days.
+- Validation is honest: `packages/agronomy/notebooks/hindcast.py` runs all four wedges against real SILO data and reports metrics (frost MAE, hit-rate; phenology budbreak DOY; smoke flag-rate on Black Summer; disease event counts). Stage 01 acceptance bands are not yet met for frost / phenology — refitting on Orange BoM AWS 063303 is genuine Stage 01 work, not a Stage 00 oversight.
 
 ## 7. OpenAPI-generated TypeScript client
 
