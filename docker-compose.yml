@@ -1,0 +1,254 @@
+# VinData — Local PoC stack.
+# `make up` is the canonical entry point; this file is the authoritative
+# source for service topology. Every long-running service has a healthcheck;
+# `depends_on.condition: service_healthy` gates ordering rigorously.
+
+name: vindata
+
+x-common-env: &common-env
+  TZ: Australia/Sydney
+
+networks:
+  vindata:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  minio-data:
+
+services:
+  # ---------------------------------------------------------------------------
+  # Postgres 16 + TimescaleDB + PostGIS (single image bundles all three).
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: timescale/timescaledb-ha:pg16
+    container_name: vindata-postgres
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/home/postgres/pgdata/data
+      - ./infra/local/postgres/init.sql:/docker-entrypoint-initdb.d/00-extensions.sql:ro
+    networks: [vindata]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # MinIO + one-shot bucket bootstrap.
+  # ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2024-12-13T22-19-12Z
+    container_name: vindata-minio
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    networks: [vindata]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  mc-init:
+    image: minio/mc:RELEASE.2024-11-21T17-21-54Z
+    container_name: vindata-mc-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      <<: *common-env
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_RAW_BUCKET: ${MINIO_RAW_BUCKET}
+      MINIO_CURATED_BUCKET: ${MINIO_CURATED_BUCKET}
+    volumes:
+      - ./infra/local/minio/create-buckets.sh:/usr/local/bin/create-buckets.sh:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/create-buckets.sh"]
+    networks: [vindata]
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # MailHog — captures any SMTP we might emit (Stage 00 has no alerts yet, but
+  # the container is cheap and lets Stage 01 plug in without a stack change).
+  # ---------------------------------------------------------------------------
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: vindata-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks: [vindata]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8025"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # API — FastAPI on uvicorn. Source mounted for hot-reload in dev.
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: vindata-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mc-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *common-env
+      VINDATA_API_HOST: ${VINDATA_API_HOST}
+      VINDATA_API_PORT: ${VINDATA_API_PORT}
+      VINDATA_API_LOG_LEVEL: ${VINDATA_API_LOG_LEVEL}
+      VINDATA_API_DATABASE_URL: ${VINDATA_API_DATABASE_URL}
+      VINDATA_API_CORS_ORIGINS: ${VINDATA_API_CORS_ORIGINS}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./packages/agronomy:/app/packages/agronomy
+    networks: [vindata]
+    command: >
+      sh -c "
+      alembic -c /app/apps/api/alembic.ini upgrade head &&
+      uvicorn vindata_api.main:app --host 0.0.0.0 --port 8000 --reload
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request,sys; urllib.request.urlopen(\"http://localhost:8000/v1/health\", timeout=2); sys.exit(0)' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Dagster — webserver + daemon. Single code-location: vindata_ingest.
+  # ---------------------------------------------------------------------------
+  dagster-webserver:
+    build:
+      context: .
+      dockerfile: apps/ingest/Dockerfile
+    container_name: vindata-dagster-webserver
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mc-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *common-env
+      DAGSTER_HOME: ${DAGSTER_HOME}
+      VINDATA_INGEST_DATABASE_URL: ${VINDATA_INGEST_DATABASE_URL}
+      VINDATA_INGEST_S3_ENDPOINT_URL: ${VINDATA_INGEST_S3_ENDPOINT_URL}
+      VINDATA_INGEST_S3_ACCESS_KEY: ${VINDATA_INGEST_S3_ACCESS_KEY}
+      VINDATA_INGEST_S3_SECRET_KEY: ${VINDATA_INGEST_S3_SECRET_KEY}
+      VINDATA_INGEST_OPEN_METEO_BASE_URL: ${VINDATA_INGEST_OPEN_METEO_BASE_URL}
+      MINIO_RAW_BUCKET: ${MINIO_RAW_BUCKET}
+      MINIO_CURATED_BUCKET: ${MINIO_CURATED_BUCKET}
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./apps/ingest:/app/apps/ingest
+      - ./packages/agronomy:/app/packages/agronomy
+      - ./infra/local/dagster/dagster.yaml:/opt/dagster/dagster_home/dagster.yaml:ro
+    networks: [vindata]
+    command: >
+      dagster-webserver
+      -h 0.0.0.0 -p 3000
+      -w /app/apps/ingest/workspace.yaml
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/server_info || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 90s
+
+  dagster-daemon:
+    build:
+      context: .
+      dockerfile: apps/ingest/Dockerfile
+    container_name: vindata-dagster-daemon
+    restart: unless-stopped
+    depends_on:
+      dagster-webserver:
+        condition: service_healthy
+    environment:
+      <<: *common-env
+      DAGSTER_HOME: ${DAGSTER_HOME}
+      VINDATA_INGEST_DATABASE_URL: ${VINDATA_INGEST_DATABASE_URL}
+      VINDATA_INGEST_S3_ENDPOINT_URL: ${VINDATA_INGEST_S3_ENDPOINT_URL}
+      VINDATA_INGEST_S3_ACCESS_KEY: ${VINDATA_INGEST_S3_ACCESS_KEY}
+      VINDATA_INGEST_S3_SECRET_KEY: ${VINDATA_INGEST_S3_SECRET_KEY}
+      VINDATA_INGEST_OPEN_METEO_BASE_URL: ${VINDATA_INGEST_OPEN_METEO_BASE_URL}
+      MINIO_RAW_BUCKET: ${MINIO_RAW_BUCKET}
+      MINIO_CURATED_BUCKET: ${MINIO_CURATED_BUCKET}
+    volumes:
+      - ./apps/ingest:/app/apps/ingest
+      - ./packages/agronomy:/app/packages/agronomy
+      - ./infra/local/dagster/dagster.yaml:/opt/dagster/dagster_home/dagster.yaml:ro
+    networks: [vindata]
+    command: dagster-daemon run -w /app/apps/ingest/workspace.yaml
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'dagster-daemon' >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Web — Vite dev server.
+  # ---------------------------------------------------------------------------
+  web:
+    image: node:22-alpine
+    container_name: vindata-web
+    restart: unless-stopped
+    working_dir: /app/apps/web
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      <<: *common-env
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/web:/app/apps/web
+      - ./package.json:/app/package.json:ro
+      - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml:ro
+      - ./tsconfig.base.json:/app/tsconfig.base.json:ro
+    command: >
+      sh -c "
+      corepack enable &&
+      corepack prepare pnpm@9.15.0 --activate &&
+      cd /app && pnpm install --frozen-lockfile=false &&
+      cd /app/apps/web && pnpm exec vite --host 0.0.0.0 --port 5173
+      "
+    healthcheck:
+      # 127.0.0.1 (not localhost) — Vite binds IPv4 only.
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:5173/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s

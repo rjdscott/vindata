@@ -1,0 +1,27 @@
+{
+  "name": "vindata",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Vineyard weather and agronomy decision-support PoC. Local-Docker-first; AWS later.",
+  "license": "SEE LICENSE FILE",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=9"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "turbo": "^2.3.3"
+  }
+}
